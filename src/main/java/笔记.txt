@@ -1,0 +1,15 @@
+use db_ssm;
+
+CREATE TABLE tb_user(
+    id int(11) NOT NULL AUTO_INCREMENT,
+                                     user_name varchar(40) NOT NULL,
+                                     password varchar(40) NOT NULL,
+                                     age int(4) NOT NULL,
+                                     PRIMARY KEY(id))
+                                     ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8;
+
+
+                                     INSERT into db_ssm.tb_user values(1, '李白', '123456', 23)
+                                     INSERT into db_ssm.tb_user values(2, '杜甫', '123456', 23)
+
+                                     SELECT * FROM db_ssm.tb_user;
