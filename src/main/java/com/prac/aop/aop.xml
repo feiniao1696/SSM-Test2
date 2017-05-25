@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+        http://www.springframework.org/schema/beans/spring-beans-4.2.xsd
+        http://www.springframework.org/schema/aop
+        http://www.springframework.org/schema/aop/spring-aop-4.2.xsd">
+
+    <bean id="helloWorldImpl1" class="com.prac.aop.HelloWorldImpl1" />
+    <bean id="helloWorldImpl2" class="com.prac.aop.HelloWorldImpl2" />
+    <bean id="timeHandler" class="com.prac.aop.TimeHandler" />
+    <bean id="logHandler" class="com.prac.aop.LogHandler" />
+    <!--
+        <aop:config>
+            <aop:aspect id="time" ref="timeHandler" order="1">
+                <aop:pointcut id="addAllMethod" expression="execution(* com.prac.aop.HelloWorld.*(..))" />
+                <aop:before method="printTime" pointcut-ref="addAllMethod" />
+                <aop:after method="printTime" pointcut-ref="addAllMethod" />
+            </aop:aspect>
+            <aop:aspect id="log" ref="logHandler" order="2">
+                <aop:pointcut id="printLog" expression="execution(* com.prac.aop.HelloWorld.*(..))" />
+                <aop:before method="LogBefore" pointcut-ref="printLog" />
+                <aop:after method="LogAfter" pointcut-ref="printLog" />
+            </aop:aspect>
+        </aop:config>
+    !-->
+
+        <aop:config>
+        <aop:aspect id="time" ref="timeHandler" order="1">
+            <aop:pointcut id="addTime" expression="execution(* com.prac.aop.HelloWorld.print*(..))" />
+            <aop:before method="printTime" pointcut-ref="addTime" />
+            <aop:after method="printTime" pointcut-ref="addTime" />
+        </aop:aspect>
+        <aop:aspect id="log" ref="logHandler" order="2">
+            <aop:pointcut id="printLog" expression="execution(* com.prac.aop.HelloWorld.do*(..))" />
+            <aop:before method="LogBefore" pointcut-ref="printLog" />
+            <aop:after method="LogAfter" pointcut-ref="printLog" />
+        </aop:aspect>
+        </aop:config>
+
+    <!--
+    前面说过Spring使用动态代理或是CGLIB生成代理是有规则的，高版本的Spring会自动选择是使用动态代理还是CGLIB生成代理内容，
+    当然我们也可以强制使用CGLIB生成代理，那就是<aop:config>里面有一个"proxy-target-class"属性，这个属性值如果被设置为true，
+    那么基于类的代理将起作用，如果proxy-target-class被设置为false或者这个属性被省略，那么基于接口的代理将起作用
+    !-->
+
+</beans>
