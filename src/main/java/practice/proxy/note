@@ -1,0 +1,208 @@
+    一、动态代理与静态代理的区别。（1）Proxy类的代码被固定下来，不会因为业务的逐渐庞大而庞大；（2）可以实现AOP编程，这是静态代理无法实现的；（3）解耦，如果用在web业务下，可以实现数据层和业务层的分离。（4）动态代理的优势就是实现无侵入式的代码扩展。 静态代理这个模式本身有个大问题，如果类方法数量越来越多的时候，代理类的代码量是十分庞大的。所以引入动态代理来解决此类问题
+    二、动态代理
+    Java中动态代理的实现，关键就是这两个东西：Proxy、InvocationHandler，下面从InvocationHandler接口中的invoke方法入手，简单说明一下Java如何实现动态代理的。
+    首先，invoke方法的完整形式如下：
+Java代码
+public Object invoke(Object proxy, Method method, Object[] args) throws Throwable
+{
+method.invoke(obj, args);
+return null;
+}
+    首先猜测一下，method是调用的方法，即需要执行的方法；args是方法的参数；proxy，这个参数是什么？以上invoke()方法的实现即是比较标准的形式，我们看到，这里并没有用到proxy参数。查看JDK文档中Proxy的说明，如下：
+    Java代码
+A method invocation on a proxy instance through one of its proxy interfaces will be dispatched to the invoke method of the instance's invocation handler, passing the proxy instance,a java.lang.reflect.Method object identifying the method that was invoked, and an array of type Object containing the arguments.
+    由此可以知道以上的猜测是正确的，同时也知道，proxy参数传递的即是代理类的实例。
+    为了方便说明，这里写一个简单的例子来实现动态代理。
+    Java代码
+//抽象角色（动态代理只能代理接口）
+public interface Subject {
+public void request();
+}
+    Java代码
+//真实角色：实现了Subject的request()方法
+public class RealSubject implements Subject{
+public void request(){
+System.out.println("From real subject.");
+}
+}
+    Java代码
+//实现了InvocationHandler
+public class DynamicSubject implements InvocationHandler
+{
+private Object obj;//这是动态代理的好处，被封装的对象是Object类型，接受任意类型的对象
+public DynamicSubject()
+{
+}
+public DynamicSubject(Object obj)
+{
+this.obj = obj;
+}
+//这个方法不是我们显示的去调用
+public Object invoke(Object proxy, Method method, Object[] args) throws Throwable
+{
+System.out.println("before calling " + method);
+method.invoke(obj, args);
+System.out.println("after calling " + method);
+return null;
+}
+}
+    Java代码
+//客户端：生成代理实例，并调用了request()方法
+public class Client {
+public static void main(String[] args) throws Throwable{
+// TODO Auto-generated method stub
+Subject rs=new RealSubject();//这里指定被代理类
+InvocationHandler ds=new DynamicSubject(rs);
+Classcls=rs.getClass();
+//以下是一次性生成代理
+Subject subject=(Subject) Proxy.newProxyInstance(
+cls.getClassLoader(),cls.getInterfaces(), ds);
+//这里可以通过运行结果证明subject是Proxy的一个实例，这个实例实现了Subject接口
+System.out.println(subject instanceof Proxy);
+//这里可以看出subject的Class类是$Proxy0,这个$Proxy0类继承了Proxy，实现了Subject接口
+System.out.println("subject的Class类是："+subject.getClass().toString());
+System.out.print("subject中的属性有：");
+Field[] field=subject.getClass().getDeclaredFields();
+for(Field f:field){
+System.out.print(f.getName()+", ");
+}
+System.out.print("\n"+"subject中的方法有：");
+Method[] method=subject.getClass().getDeclaredMethods();
+for(Method m:method){
+System.out.print(m.getName()+", ");
+}
+System.out.println("\n"+"subject的父类是："+subject.getClass().getSuperclass());
+System.out.print("\n"+"subject实现的接口是：");
+Class[] interfaces=subject.getClass().getInterfaces();
+for(Classi:interfaces){
+System.out.print(i.getName()+", ");
+}
+System.out.println("\n\n"+"运行结果为：");
+subject.request();
+}
+}
+    Xml代码
+运行结果如下：此处省略了包名，***代替
+true
+subject的Class类是：class $Proxy0
+subject中的属性有：m1, m3, m0, m2,
+subject中的方法有：request, hashCode, equals, toString,
+subject的父类是：class java.lang.reflect.Proxy
+subject实现的接口是：cn.edu.ustc.dynamicproxy.Subject,
+运行结果为：
+before calling public abstract void ***.Subject.request()
+From real subject.
+after calling public abstract void ***.Subject.request()
+    PS：这个结果的信息非常重要，至少对我来说。因为我在动态代理犯晕的根源就在于将上面的subject.request()理解错了，至少是被表面所迷惑，没有发现这个subject和Proxy之间的联系，一度纠结于最后调用的这个request()是怎么和invoke()联系上的，而invoke又是怎么知道request存在的。其实上面的true和class $Proxy0就能解决很多的疑问，再加上下面将要说的$Proxy0的源码，完全可以解决动态代理的疑惑了。
+    从以上代码和结果可以看出，我们并没有显示的调用invoke()方法，但是这个方法确实执行了。下面就整个的过程进行分析一下：
+    从Client中的代码看，可以从newProxyInstance这个方法作为突破口，我们先来看一下Proxy类中newProxyInstance方法的源代码：
+    Java代码
+public static Object newProxyInstance(ClassLoader loader,
+Class[] interfaces,
+InvocationHandler h)
+throws IllegalArgumentException
+{
+if (h == null) {
+throw new NullPointerException();
+}
+/*
+* Look up or generate the designated proxy class.
+*/
+Class cl = getProxyClass(loader, interfaces);
+/*
+* Invoke its constructor with the designated invocation handler.
+*/
+try {
+/*
+* Proxy源码开始有这样的定义：
+* private final static Class[] constructorParams = { InvocationHandler.class };
+* cons即是形参为InvocationHandler类型的构造方法
+*/
+Constructor cons = cl.getConstructor(constructorParams);
+return (Object) cons.newInstance(new Object[] { h });
+} catch (NoSuchMethodException e) {
+throw new InternalError(e.toString());
+} catch (IllegalAccessException e) {
+throw new InternalError(e.toString());
+} catch (InstantiationException e) {
+throw new InternalError(e.toString());
+} catch (InvocationTargetException e) {
+throw new InternalError(e.toString());
+}
+}
+    Proxy.newProxyInstance(ClassLoader loader, Class[] interfaces, InvocationHandler h)做了以下几件事.
+    （1）根据参数loader和interfaces调用方法 getProxyClass(loader, interfaces)创建代理类$Proxy0.$Proxy0类 实现了interfaces的接口,并继承了Proxy类.
+    （2）实例化$Proxy0并在构造方法中把DynamicSubject传过去,接着$Proxy0调用父类Proxy的构造器,为h赋值,如下：
+    Java代码
+class Proxy{
+InvocationHandler h=null;
+protected Proxy(InvocationHandler h) {
+this.h = h;
+}
+...
+}
+    来看一下这个继承了Proxy的$Proxy0的源代码：
+    Java代码
+public final class $Proxy0 extends Proxy implements Subject {
+private static Method m1;
+private static Method m0;
+private static Method m3;
+private static Method m2;
+static {
+try {
+m1 = Class.forName("java.lang.Object").getMethod("equals",
+new Class[] { Class.forName("java.lang.Object") });
+m0 = Class.forName("java.lang.Object").getMethod("hashCode",
+new Class[0]);
+m3 = Class.forName("***.RealSubject").getMethod("request",
+new Class[0]);
+m2 = Class.forName("java.lang.Object").getMethod("toString",
+new Class[0]);
+} catch (NoSuchMethodException nosuchmethodexception) {
+throw new NoSuchMethodError(nosuchmethodexception.getMessage());
+} catch (ClassNotFoundException classnotfoundexception) {
+throw new NoClassDefFoundError(classnotfoundexception.getMessage());
+}
+} //static
+public $Proxy0(InvocationHandler invocationhandler) {
+super(invocationhandler);
+}
+@Override
+public final boolean equals(Object obj) {
+try {
+return ((Boolean) super.h.invoke(this, m1, new Object[] { obj })) .booleanValue();
+} catch (Throwable throwable) {
+throw new UndeclaredThrowableException(throwable);
+}
+}
+@Override
+public final int hashCode() {
+try {
+return ((Integer) super.h.invoke(this, m0, null)).intValue();
+} catch (Throwable throwable) {
+throw new UndeclaredThrowableException(throwable);
+}
+}
+public final void request() {
+try {
+super.h.invoke(this, m3, null);
+return;
+} catch (Error e) {
+} catch (Throwable throwable) {
+throw new UndeclaredThrowableException(throwable);
+}
+}
+@Override
+public final String toString() {
+try {
+return (String) super.h.invoke(this, m2, null);
+} catch (Throwable throwable) {
+throw new UndeclaredThrowableException(throwable);
+}
+}
+}
+    接着把得到的$Proxy0实例强制转换成Subject，并将引用赋给subject。当执行subject.request()方法时，就调用了$Proxy0类中的request()方法，进而调用父类Proxy中的h的invoke()方法.即InvocationHandler.invoke()。
+    PS：1、需要说明的一点是，Proxy类中getProxyClass方法返回的是Proxy的Class类。之所以说明，是因为我一开始犯了个低级错误，以为返回的是“被代理类的Class类”- -！推荐看一下getProxyClass的源码，很长=。=
+    2、从$Proxy0的源码可以看出，动态代理类不仅代理了显示定义的接口中的方法，而且还代理了java的根类Object中的继承而来的equals()、hashcode()、toString()这三个方法，并且仅此三个方法。
+    Q：到现在为止，还有一个疑问，invoke方法中的第一个参数是Proxy的实例（准确说，最终用到的是$Proxy0的实例），但是有什么用呢？或者说，程序内是怎样显示出作用的？
+    A：就本人目前的水平看来，这个proxy参数并没有什么作用，在整个动态代理机制中，并没有用到InvocationHandler中invoke方法的proxy参数。而传入的这个参数实际是代理类的一个实例。我想可能是为了让程序员在invoke方法中使用反射来获取关于代理类的一些信息吧。
